@@ -1,3 +1,4 @@
+image: Visual Studio 2017
 build: off
 
 clone_folder: c:\gopath\src\github.com\gomods\athens
@@ -8,8 +9,7 @@ environment:
   GOPROXY: https://proxy.golang.org
   SKIP_UNTIL_113: true
 
-stack: go 1.14
+stack: go 1.13
 
 test_script:
-  - go test ./...
-
+  - go test -v ./...
