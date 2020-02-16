@@ -6,14 +6,41 @@ import (
 	"io/ioutil"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gomods/athens/pkg/config"
 	"github.com/gomods/athens/pkg/errors"
 	"github.com/gomods/athens/pkg/storage"
 	"github.com/gomods/athens/pkg/storage/compliance"
-
 	"github.com/stretchr/testify/require"
+	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+var mongoContainer testcontainers.Container
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	req := testcontainers.ContainerRequest{
+		Image:        "mongo:3.6",
+		ExposedPorts: []string{"27017/tcp"},
+		WaitingFor:   wait.ForLog("waiting for connections on port 27017").WithStartupTimeout(time.Minute * 1),
+	}
+
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+
+	if err != nil {
+		os.Exit(1)
+	}
+
+	mongoContainer = c
+	defer c.Terminate(ctx)
+	os.Exit(m.Run())
+
+}
 
 func TestBackend(t *testing.T) {
 	backend := getStorage(t)
@@ -31,13 +58,12 @@ func BenchmarkBackend(b *testing.B) {
 }
 
 func getStorage(tb testing.TB) *ModuleStore {
-	url := os.Getenv("ATHENS_MONGO_STORAGE_URL")
-
-	if url == "" {
-		tb.SkipNow()
+	ep, err := mongoContainer.Endpoint(context.Background(), "mongodb")
+	if err != nil {
+		tb.Fatal(err)
 	}
 
-	backend, err := NewStorage(&config.MongoConfig{URL: url}, config.GetTimeoutDuration(300))
+	backend, err := NewStorage(&config.MongoConfig{URL: ep}, config.GetTimeoutDuration(300))
 	require.NoError(tb, err)
 
 	return backend
@@ -98,10 +124,9 @@ func TestQueryKindNotFoundErrorCases(t *testing.T) {
 	}
 }
 func TestNewStorageWithDefaultOverrides(t *testing.T) {
-	url := os.Getenv("ATHENS_MONGO_STORAGE_URL")
-
-	if url == "" {
-		t.SkipNow()
+	url, err := mongoContainer.Endpoint(context.Background(), "mongodb")
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	testCases := []struct {

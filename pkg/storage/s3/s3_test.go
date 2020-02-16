@@ -4,13 +4,46 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/gomods/athens/pkg/config"
 	"github.com/gomods/athens/pkg/storage/compliance"
+	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+var minioContainer testcontainers.Container
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	req := testcontainers.ContainerRequest{
+		Image:        "minio/minio:latest",
+		ExposedPorts: []string{"9000/tcp"},
+		WaitingFor:   wait.ForLog("Endpoint:").WithStartupTimeout(time.Minute * 1),
+		Cmd:          []string{"server", "/data"},
+		Env: map[string]string{
+			"MINIO_ACCESS_KEY": "minio",
+			"MINIO_SECRET_KEY": "minio123",
+		},
+	}
+
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+
+	if err != nil {
+		panic(err.Error())
+	}
+
+	minioContainer = c
+	defer c.Terminate(ctx)
+	os.Exit(m.Run())
+
+}
 
 func TestBackend(t *testing.T) {
 	backend := getStorage(t)
@@ -69,9 +102,9 @@ func (s *Storage) createBucket() error {
 }
 
 func getStorage(t testing.TB) *Storage {
-	url := os.Getenv("ATHENS_MINIO_ENDPOINT")
-	if url == "" {
-		t.SkipNow()
+	url, err := minioContainer.Endpoint(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	options := func(conf *aws.Config) {
@@ -80,10 +113,10 @@ func getStorage(t testing.TB) *Storage {
 	}
 	backend, err := New(
 		&config.S3Config{
-			Key:    "minio",
-			Secret: "minio123",
-			Bucket: "gomodsaws",
-			Region: "us-west-1",
+			Key:            "minio",
+			Secret:         "minio123",
+			Bucket:         "gomodsaws",
+			Region:         "us-west-1",
 			ForcePathStyle: true,
 		},
 		config.GetTimeoutDuration(300),

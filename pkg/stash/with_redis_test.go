@@ -3,7 +3,6 @@ package stash
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/gomods/athens/pkg/storage"
 	"github.com/gomods/athens/pkg/storage/mem"
+	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -18,10 +19,27 @@ import (
 // response. We can ensure that because only the first response does not return an error
 // and therefore all 5 responses should have no error.
 func TestWithRedisLock(t *testing.T) {
-	endpoint := os.Getenv("REDIS_TEST_ENDPOINT")
-	if len(endpoint) == 0 {
-		t.SkipNow()
+	req := testcontainers.ContainerRequest{
+		Image:        "redis:alpine",
+		ExposedPorts: []string{"6379/tcp"},
+		WaitingFor:   wait.ForLog("Ready to accept connections").WithStartupTimeout(time.Minute * 1),
 	}
+	c, err := testcontainers.GenericContainer(context.Background(), testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	defer c.Terminate(context.Background())
+
+	endpoint, err := c.Endpoint(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	strg, err := mem.NewStorage()
 	if err != nil {
 		t.Fatal(err)

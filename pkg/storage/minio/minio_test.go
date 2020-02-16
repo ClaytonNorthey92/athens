@@ -1,12 +1,46 @@
 package minio
 
 import (
+	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gomods/athens/pkg/config"
 	"github.com/gomods/athens/pkg/storage/compliance"
+	testcontainers "github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
+
+var minioContainer testcontainers.Container
+
+func TestMain(m *testing.M) {
+	ctx := context.Background()
+	req := testcontainers.ContainerRequest{
+		Image:        "minio/minio:latest",
+		ExposedPorts: []string{"9000/tcp"},
+		WaitingFor:   wait.ForLog("Endpoint:").WithStartupTimeout(time.Minute * 1),
+		Cmd:          []string{"server", "/data"},
+		Env: map[string]string{
+			"MINIO_ACCESS_KEY": "minio",
+			"MINIO_SECRET_KEY": "minio123",
+		},
+	}
+
+	c, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+	})
+
+	if err != nil {
+		panic(err.Error())
+	}
+
+	minioContainer = c
+	defer c.Terminate(ctx)
+	os.Exit(m.Run())
+
+}
 
 func TestBackend(t *testing.T) {
 	backend := getStorage(t)
@@ -15,10 +49,6 @@ func TestBackend(t *testing.T) {
 
 // TestNewStorageExists tests the logic around MakeBucket and BucketExists
 func TestNewStorageExists(t *testing.T) {
-	url := os.Getenv("ATHENS_MINIO_ENDPOINT")
-	if url == "" {
-		t.SkipNow()
-	}
 
 	tests := []struct {
 		name         string
@@ -30,7 +60,7 @@ func TestNewStorageExists(t *testing.T) {
 
 	for _, test := range tests {
 		backend, err := NewStorage(&config.MinioConfig{
-			Endpoint: url,
+			Endpoint: getURL(t),
 			Key:      "minio",
 			Secret:   "minio123",
 			Bucket:   test.name,
@@ -51,10 +81,7 @@ func TestNewStorageExists(t *testing.T) {
 // To ensure both paths are tested, there is a strict path error using the
 // "_" and a non strict error using less than 3 characters
 func TestNewStorageError(t *testing.T) {
-	url := os.Getenv("ATHENS_MINIO_ENDPOINT")
-	if url == "" {
-		t.SkipNow()
-	}
+	url := getURL(t)
 
 	// "_" is not allowed in a bucket name
 	// bucket name must be bigger than 3
@@ -91,14 +118,23 @@ func (s *storageImpl) clear() error {
 	return nil
 }
 
+func getURL(t testing.TB) string {
+	ep, err := minioContainer.Endpoint(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return ep
+}
+
 func getStorage(t testing.TB) *storageImpl {
-	url := os.Getenv("ATHENS_MINIO_ENDPOINT")
-	if url == "" {
-		t.SkipNow()
+	ep, err := minioContainer.Endpoint(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	backend, err := NewStorage(&config.MinioConfig{
-		Endpoint: url,
+		Endpoint: ep,
 		Key:      "minio",
 		Secret:   "minio123",
 		Bucket:   "gomods",

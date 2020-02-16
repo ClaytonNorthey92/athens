@@ -29,7 +29,6 @@ steps:
   # test
   - ./scripts/check_gofmt.sh
   - go vet ./...
-  - go test -v ./...
 
   # end to end test
   - ./main & # run the just-built athens server
