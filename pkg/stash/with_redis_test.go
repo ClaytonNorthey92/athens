@@ -19,6 +19,7 @@ import (
 // response. We can ensure that because only the first response does not return an error
 // and therefore all 5 responses should have no error.
 func TestWithRedisLock(t *testing.T) {
+	t.Fatal("EXPLICIT FAILURE")
 	req := testcontainers.ContainerRequest{
 		Image:        "redis:alpine",
 		ExposedPorts: []string{"6379/tcp"},
