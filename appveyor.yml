@@ -12,5 +12,8 @@ environment:
 
 stack: go 1.13
 
+install:
+  - choco upgrade docker-desktop
+
 test_script:
   - go test -v ./...
