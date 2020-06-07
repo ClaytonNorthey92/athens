@@ -22,8 +22,8 @@ var minioEndpoint string
 
 func TestMain(m *testing.M) {
 	if useTestContainers != "1" {
-		os.Exit(m.Run())
 		minioEndpoint = os.Getenv("ATHENS_MINIO_ENDPOINT")
+		os.Exit(m.Run())
 	}
 
 	ctx := context.Background()
